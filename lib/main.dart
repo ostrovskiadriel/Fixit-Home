@@ -68,7 +68,7 @@ class FixItApp extends StatelessWidget {
           primary: kColorBlue,
           secondary: kColorAmber,
           surface: kColorSlate,
-          onSurface: Colors.white.withOpacity(0.9),
+          onSurface: Colors.white.withAlpha(230),
         ),
         scaffoldBackgroundColor: kColorSlate,
       ),

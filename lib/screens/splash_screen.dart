@@ -47,19 +47,44 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // TODO: Adicionar a logo "FixIt Home" aqui
-            const Icon(Icons.build, size: 60, color: Color(0xFF2563EB)),
-            const SizedBox(height: 20),
+            // Logo FixIt Home - Ícone de ferramentas com estilo
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.primary.withAlpha(25),
+              ),
+              child: Icon(
+                Icons.build,
+                size: 60,
+                color: colors.primary,
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(
               'FixIt Home',
-              style: Theme.of(context).textTheme.headlineMedium,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colors.onSurface,
+                  ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+            Text(
+              'Seu guia de manutenção doméstica',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurface.withAlpha(179),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
             const CircularProgressIndicator(),
           ],
         ),

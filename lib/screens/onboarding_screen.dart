@@ -112,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     dotsCount: _pages.length,
                     position: _currentPage.toDouble(),
                     decorator: DotsDecorator(
-                      color: colors.onSurface.withOpacity(0.2), // Inativo
+                      color: colors.onSurface.withAlpha(51), // Inativo
                       activeColor: colors.primary, // Ativo (Azul)
                       size: const Size.square(9.0),
                       activeSize: const Size(18.0, 9.0),

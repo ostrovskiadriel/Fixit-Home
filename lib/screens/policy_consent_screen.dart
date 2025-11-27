@@ -135,14 +135,14 @@ class _PolicyConsentScreenState extends State<PolicyConsentScreen> {
       title: Text(title),
       leading: Icon(
         isRead ? Icons.check_circle : Icons.radio_button_unchecked,
-        color: isRead ? Colors.green : colors.onSurface.withOpacity(0.5),
+        color: isRead ? Colors.green : colors.onSurface.withAlpha(128),
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(
-          color: colors.onSurface.withOpacity(0.2),
+          color: colors.onSurface.withAlpha(51),
         ),
       ),
     );
