@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 // Import corrigido
 import '../features/daily_goals/presentation/pages/daily_goals_list_screen.dart';
+import 'package:fixit_home/features/maintenance_tasks/presentation/pages/maintenance_tasks_list_page.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -13,6 +14,12 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
+void _navigateToMaintenance(BuildContext context) {
+  Navigator.of(context).push(
+    MaterialPageRoute(builder: (ctx) => const MaintenanceTasksListPage()),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +62,15 @@ class HomeScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
+              const SizedBox(height: 16), // Espaçamento
+              ElevatedButton.icon(
+              onPressed: () => _navigateToMaintenance(context),
+              icon: const Icon(Icons.cleaning_services),
+              label: const Text('Gerenciar Manutenções'),
+             style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+  ),
+),
             ],
           ),
         ),
