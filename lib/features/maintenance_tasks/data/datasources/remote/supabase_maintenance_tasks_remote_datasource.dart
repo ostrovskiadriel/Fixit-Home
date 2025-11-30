@@ -34,4 +34,25 @@ class SupabaseMaintenanceTasksRemoteDatasource {
       return RemotePage<MaintenanceTaskDto>(items: []);
     }
   }
+
+  /// Upsert em lote de MaintenanceTaskDto para o Supabase (melhor esforço).
+  Future<int> upsertMaintenanceTasks(List<MaintenanceTaskDto> dtos) async {
+    try {
+      if (kDebugMode) print('SupabaseMaintenanceTasksRemoteDatasource.upsertMaintenanceTasks: enviando ${dtos.length} items');
+
+      final payload = dtos.map((d) => d.toJson()).toList();
+      final response = await _client.from('maintenance_tasks').upsert(payload).select();
+
+      try {
+        final rows = response as List<dynamic>;
+        if (kDebugMode) print('SupabaseMaintenanceTasksRemoteDatasource.upsertMaintenanceTasks: servidor retornou ${rows.length} rows');
+        return rows.length;
+      } catch (_) {
+        return 0;
+      }
+    } catch (e) {
+      if (kDebugMode) print('SupabaseMaintenanceTasksRemoteDatasource.upsertMaintenanceTasks: erro - $e');
+      return 0;
+    }
+  }
 }

@@ -91,6 +91,29 @@ class SupabaseDailyGoalsRemoteDatasource {
       return RemotePage<DailyGoalDto>(items: []);
     }
   }
+
+  /// Upsert em lote de DailyGoalDto para o Supabase (melhor esforço).
+  /// Retorna o número de linhas retornadas pelo servidor (ou 0 em caso de erro).
+  Future<int> upsertDailyGoals(List<DailyGoalDto> dtos) async {
+    try {
+      if (kDebugMode) print('SupabaseDailyGoalsRemoteDatasource.upsertDailyGoals: enviando ${dtos.length} items');
+
+      final payload = dtos.map((d) => d.toJson()).toList();
+
+      final response = await _client.from('daily_goals').upsert(payload).select();
+
+      try {
+        final rows = response as List<dynamic>;
+        if (kDebugMode) print('SupabaseDailyGoalsRemoteDatasource.upsertDailyGoals: servidor retornou ${rows.length} rows');
+        return rows.length;
+      } catch (_) {
+        return 0;
+      }
+    } catch (e) {
+      if (kDebugMode) print('SupabaseDailyGoalsRemoteDatasource.upsertDailyGoals: erro - $e');
+      return 0;
+    }
+  }
 }
 
 /*

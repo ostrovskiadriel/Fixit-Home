@@ -1,10 +1,16 @@
 // lib/features/daily_goals/presentation/pages/daily_goals_list_screen.dart
 import 'package:flutter/material.dart';
-import 'package:fixit_home/main.dart'; // Acesso ao supabase
+// NOTE: Supabase access moved to repository. UI no longer calls Supabase directly.
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'package:fixit_home/features/daily_goals/data/datasources/local/daily_goals_local_dao_shared_prefs.dart';
+import 'package:fixit_home/features/daily_goals/data/datasources/remote/supabase_daily_goals_remote_datasource.dart';
+import 'package:fixit_home/features/daily_goals/data/mappers/daily_goal_mapper.dart';
+import 'package:fixit_home/features/daily_goals/data/repositories/daily_goals_repository_impl.dart';
 
 // Imports Clean Architecture
 import '../../domain/entities/daily_goal_entity.dart';
-import '../../data/dtos/daily_goal_dto.dart';
+// DTO imports removed — UI works with domain entities only
 import '../widgets/daily_goal_entity_form_dialog.dart';
 import '../widgets/daily_goal_details_dialog.dart'; // <-- NOVO IMPORT
 
@@ -17,27 +23,62 @@ class DailyGoalsListScreen extends StatefulWidget {
 class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
   bool _isLoading = true;
   List<DailyGoalEntity> _goals = [];
+  DailyGoalsRepositoryImpl? _repo;
 
   @override
   void initState() {
     super.initState();
-    _loadGoals();
+    _initAndLoad();
+  }
+
+  Future<void> _initAndLoad() async {
+    // Inicializa o repositório (DAO local + remote datasource + mapper)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localDao = DailyGoalsLocalDaoSharedPrefs(prefs: prefs);
+      final remote = SupabaseDailyGoalsRemoteDatasource();
+      final mapper = DailyGoalMapper();
+
+      _repo = DailyGoalsRepositoryImpl(
+        remoteDatasource: remote,
+        localDao: localDao,
+        mapper: mapper,
+        prefsAsync: Future.value(prefs),
+      );
+
+      await _loadGoals();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao inicializar repositório: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   /// READ (Ler)
   Future<void> _loadGoals() async {
     setState(() => _isLoading = true);
     try {
-      final data = await supabase
-          .from('daily_goals')
-          .select()
-          .order('date', ascending: false);
+      // 1) Tenta carregar do cache local para render rápido
+      final repo = _repo;
+      if (repo == null) throw Exception('Repositório não inicializado');
 
-      final dtos = data
-          .map((item) => DailyGoalDto.fromJson(item))
-          .toList();
+      final cached = await repo.loadFromCache();
 
-      final entities = dtos.map(_dtoToEntity).toList();
+      // Se cache vazio, dispara sincronização do servidor
+      if (cached.isEmpty) {
+        if (mounted) {
+          setState(() { _goals = []; });
+        }
+        try {
+          await repo.syncFromServer();
+        } catch (e) {
+          if (kDebugMode) print('Erro durante sync inicial: $e');
+        }
+      }
+
+      // Carrega a lista atualizada do cache
+      final entities = await repo.listAll();
 
       if (mounted) {
         setState(() {
@@ -57,9 +98,9 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
   Future<void> _openCreateGoalDialog() async {
     final newGoalEntity = await showDailyGoalEntityFormDialog(context);
     if (newGoalEntity != null) {
-      final newGoalDto = _entityToDto(newGoalEntity);
       try {
-        await supabase.from('daily_goals').insert(newGoalDto.toJson());
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.create(newGoalEntity);
         await _loadGoals();
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar: $e')));
@@ -74,13 +115,8 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
     
     if (editedGoal != null) {
       try {
-        final dto = _entityToDto(editedGoal);
-        // Atualiza no Supabase onde o ID for igual
-        await supabase
-            .from('daily_goals')
-            .update(dto.toJson())
-            .eq('goal_id', goal.id);
-            
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.update(editedGoal);
         await _loadGoals(); // Recarrega a lista
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta atualizada!')));
       } catch (e) {
@@ -106,7 +142,8 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
 
     if (confirm == true) {
       try {
-        await supabase.from('daily_goals').delete().eq('goal_id', goal.id);
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.delete(goal.id);
         await _loadGoals();
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta removida.')));
       } catch (e) {
@@ -134,7 +171,13 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
 
   Widget _buildGoalList() {
     if (_goals.isEmpty) {
-      return const Center(child: Text('Nenhuma meta encontrada.'));
+      return RefreshIndicator(
+        onRefresh: () => _repo?.syncFromServer().then((_) => _loadGoals()) ?? _loadGoals(),
+        child: const SingleChildScrollView(
+          physics: AlwaysScrollableScrollPhysics(),
+          child: SizedBox(height: 300, child: Center(child: Text('Nenhuma meta encontrada.'))),
+        ),
+      );
     }
     return ListView.builder(
       padding: const EdgeInsets.all(8.0),
@@ -160,20 +203,6 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
     );
   }
 
-  // Mappers
-  DailyGoalEntity _dtoToEntity(DailyGoalDto dto) {
-    return DailyGoalEntity(
-      id: dto.goalId, userId: dto.userId, type: GoalType.fromString(dto.type),
-      targetValue: dto.targetValue, currentValue: dto.currentValue,
-      date: DateTime.parse(dto.date), isCompleted: dto.isCompleted,
-    );
-  }
+  // Note: Entity->DTO mapping moved to repository/mapper; UI should not perform conversion.
 
-  DailyGoalDto _entityToDto(DailyGoalEntity entity) {
-    return DailyGoalDto(
-      goalId: entity.id, userId: entity.userId, type: entity.type.name,
-      targetValue: entity.targetValue, currentValue: entity.currentValue,
-      date: entity.date.toIso8601String(), isCompleted: entity.isCompleted,
-    );
-  }
 }

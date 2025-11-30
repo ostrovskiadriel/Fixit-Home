@@ -2,9 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 // Imports da Arquitetura
 import '../../domain/entities/maintenance_task_entity.dart';
+import '../../data/datasources/local/maintenance_tasks_local_dao_shared_prefs.dart';
+import '../../data/datasources/remote/supabase_maintenance_tasks_remote_datasource.dart';
+import '../../data/mappers/maintenance_task_mapper.dart';
 import '../../data/repositories/maintenance_tasks_repository_impl.dart';
 import '../widgets/maintenance_task_form_dialog.dart';
 
@@ -16,35 +21,62 @@ class MaintenanceTasksListPage extends StatefulWidget {
 }
 
 class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
-  // Instancia o repositório (que fala com o Supabase)
-  final _repository = MaintenanceTasksRepositoryImpl();
-  
+  MaintenanceTasksRepositoryImpl? _repo;
   bool _isLoading = true;
   List<MaintenanceTaskEntity> _tasks = [];
 
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    _initAndLoad();
   }
 
-  /// Carrega as tarefas do Repositório
-  Future<void> _loadTasks() async {
-    setState(() => _isLoading = true);
+  Future<void> _initAndLoad() async {
     try {
-      final tasks = await _repository.listAll();
-      if (mounted) {
-        setState(() {
-          _tasks = tasks;
-          _isLoading = false;
-        });
-      }
+      final prefs = await SharedPreferences.getInstance();
+      final localDao = MaintenanceTasksLocalDaoSharedPrefs(prefs: prefs);
+      final remote = SupabaseMaintenanceTasksRemoteDatasource();
+      final mapper = MaintenanceTaskMapper();
+
+      _repo = MaintenanceTasksRepositoryImpl(
+        remote: remote,
+        localDao: localDao,
+        mapper: mapper,
+        prefsAsync: Future.value(prefs),
+      );
+
+      await _loadTasks();
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar: $e'), backgroundColor: Colors.red),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao inicializar repositório: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  /// Carrega as tarefas do Repositório com padrão cache→sync
+  Future<void> _loadTasks() async {
+    setState(() => _isLoading = true);
+    try {
+      final repo = _repo;
+      if (repo == null) throw Exception('Repositório não inicializado');
+
+      final cached = await repo.loadFromCache();
+      if (cached.isEmpty) {
+        if (mounted) setState(() => _tasks = []);
+        try {
+          await repo.syncFromServer();
+        } catch (e) {
+          if (kDebugMode) print('Erro durante sync inicial: $e');
+        }
+      }
+
+      final entities = await repo.listAll();
+      if (mounted) setState(() { _tasks = entities; _isLoading = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao carregar: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -52,16 +84,12 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
   /// Adicionar Nova Tarefa
   Future<void> _addTask() async {
     final newTask = await showMaintenanceTaskFormDialog(context);
-    
     if (newTask != null) {
       try {
-        await _repository.create(newTask);
-        _loadTasks(); // Recarrega a lista
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Tarefa criada com sucesso!')),
-          );
-        }
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.create(newTask);
+        await _loadTasks();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tarefa criada com sucesso!')));
       } catch (e) {
         _showError('Erro ao criar: $e');
       }
@@ -71,11 +99,11 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
   /// Editar Tarefa Existente
   Future<void> _editTask(MaintenanceTaskEntity task) async {
     final editedTask = await showMaintenanceTaskFormDialog(context, initial: task);
-
     if (editedTask != null) {
       try {
-        await _repository.update(editedTask);
-        _loadTasks();
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.update(editedTask);
+        await _loadTasks();
       } catch (e) {
         _showError('Erro ao atualizar: $e');
       }
@@ -98,8 +126,9 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
 
     if (confirm == true) {
       try {
-        await _repository.delete(task.id);
-        _loadTasks();
+        if (_repo == null) throw Exception('Repositório não inicializado');
+        await _repo!.delete(task.id);
+        await _loadTasks();
       } catch (e) {
         _showError('Erro ao deletar: $e');
       }
@@ -117,32 +146,20 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manutenções'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTasks),
-        ],
+        actions: [ IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTasks) ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _tasks.isEmpty
-              ? _buildEmptyState()
+              ? RefreshIndicator(
+                  onRefresh: () => _repo?.syncFromServer().then((_) => _loadTasks()) ?? _loadTasks(),
+                  child: const SingleChildScrollView(
+                    physics: AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(height: 300, child: Center(child: Text('Nenhuma manutenção agendada.'))),
+                  ),
+                )
               : _buildList(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addTask,
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.cleaning_services_outlined, size: 60, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          const Text('Nenhuma manutenção agendada.', style: TextStyle(color: Colors.grey)),
-        ],
-      ),
+      floatingActionButton: FloatingActionButton(onPressed: _addTask, child: const Icon(Icons.add)),
     );
   }
 
@@ -166,17 +183,9 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
                 Text('Vence em: ${DateFormat.yMMMd().format(task.nextDueDate)}'),
                 Row(
                   children: [
-                    Chip(
-                      label: Text(task.frequency.label, style: const TextStyle(fontSize: 10)),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
+                    Chip(label: Text(task.frequency.label, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
                     const SizedBox(width: 8),
-                    Chip(
-                      label: Text(task.difficulty.label, style: const TextStyle(fontSize: 10)),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
+                    Chip(label: Text(task.difficulty.label, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
                   ],
                 )
               ],
@@ -201,10 +210,14 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
 
   Color _getDifficultyColor(TaskDifficulty d) {
     switch (d) {
-      case TaskDifficulty.easy: return Colors.green;
-      case TaskDifficulty.medium: return Colors.orange;
-      case TaskDifficulty.hard: return Colors.red;
-      case TaskDifficulty.expert: return Colors.purple;
+      case TaskDifficulty.easy:
+        return Colors.green;
+      case TaskDifficulty.medium:
+        return Colors.orange;
+      case TaskDifficulty.hard:
+        return Colors.red;
+      case TaskDifficulty.expert:
+        return Colors.purple;
     }
   }
 }

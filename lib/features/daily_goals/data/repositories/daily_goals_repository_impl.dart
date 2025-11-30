@@ -5,6 +5,7 @@ import 'package:fixit_home/features/daily_goals/domain/repositories/daily_goals_
 import '../datasources/local/daily_goals_local_dao.dart';
 import '../datasources/remote/supabase_daily_goals_remote_datasource.dart';
 import '../mappers/daily_goal_mapper.dart';
+import 'package:fixit_home/main.dart' show supabase;
 
 /// Implementação concreta do repositório de metas diárias.
 ///
@@ -78,6 +79,18 @@ class DailyGoalsRepositoryImpl implements DailyGoalsRepository {
   @override
   Future<int> syncFromServer() async {
     try {
+      // 0) Push local -> remoto (melhor esforço)
+      try {
+        final localDtos = await _localDao.getAll();
+        if (localDtos.isNotEmpty) {
+          if (kDebugMode) print('DailyGoalsRepositoryImpl.syncFromServer: enviando ${localDtos.length} items ao remoto (push)');
+          final pushed = await _remoteDatasource.upsertDailyGoals(localDtos);
+          if (kDebugMode) print('DailyGoalsRepositoryImpl.syncFromServer: push devolveu $pushed rows');
+        }
+      } catch (e) {
+        if (kDebugMode) print('DailyGoalsRepositoryImpl.syncFromServer: push falhou - $e');
+      }
+
       final prefs = await _prefsAsync;
       final lastSyncIso = prefs.getString(_lastSyncKey);
 
@@ -97,7 +110,7 @@ class DailyGoalsRepositoryImpl implements DailyGoalsRepository {
         print('DailyGoalsRepositoryImpl.syncFromServer: iniciando sync desde ${since?.toIso8601String() ?? "início"}');
       }
 
-      // Buscar do servidor
+      // Buscar do servidor (pull incremental)
       final page = await _remoteDatasource.fetchDailyGoals(since: since, limit: 500);
 
       if (page.items.isEmpty) {
@@ -158,9 +171,24 @@ class DailyGoalsRepositoryImpl implements DailyGoalsRepository {
   Future<List<DailyGoalEntity>> listFeatured() async {
     try {
       final allEntities = await listAll();
-      // TODO: Implementar filtro específico se houver campo 'featured' na entidade
-      // Por enquanto, retorna todas
-      return allEntities;
+
+      // Prioridade 1: metas de hoje que ainda não foram completadas
+      var featured = allEntities.where((g) => !g.isCompleted && g.isToday).toList();
+
+      // Se não houver metas de hoje, retornar as principais metas não-completas
+      if (featured.isEmpty) {
+        featured = allEntities.where((g) => !g.isCompleted).toList();
+      }
+
+      // Ordena por progresso decrescente (metas mais próximas de serem concluídas primeiro)
+      featured.sort((a, b) => b.progress.compareTo(a.progress));
+
+      // Limita para um número razoável de itens (ex: 3) para exibição em widgets de destaque
+      final top = featured.length <= 3 ? featured : featured.sublist(0, 3);
+
+      if (kDebugMode) print('DailyGoalsRepositoryImpl.listFeatured: retornando ${top.length} metas em destaque');
+
+      return top;
     } catch (e) {
       if (kDebugMode) {
         print('DailyGoalsRepositoryImpl.listFeatured: erro - $e');
@@ -230,10 +258,17 @@ class DailyGoalsRepositoryImpl implements DailyGoalsRepository {
   @override
   Future<bool> delete(String id) async {
     try {
+      // Tenta deletar no servidor e no cache local para manter consistência
+      try {
+        await supabase.from('daily_goals').delete().eq('goal_id', id);
+      } catch (e) {
+        if (kDebugMode) print('DailyGoalsRepositoryImpl.delete: erro ao deletar no servidor - $e');
+      }
+
       await _localDao.delete(id);
 
       if (kDebugMode) {
-        print('DailyGoalsRepositoryImpl.delete: meta $id deletada');
+        print('DailyGoalsRepositoryImpl.delete: meta $id deletada (cache atualizado)');
       }
 
       return true;
@@ -242,6 +277,30 @@ class DailyGoalsRepositoryImpl implements DailyGoalsRepository {
         print('DailyGoalsRepositoryImpl.delete: erro ao deletar - $e');
       }
       return false;
+    }
+  }
+
+  /// Cria uma nova meta — escreve no servidor e sincroniza o cache local.
+  Future<void> create(DailyGoalEntity goal) async {
+    try {
+      final dto = _mapper.entityToDto(goal);
+      await supabase.from('daily_goals').insert(dto.toJson());
+      await syncFromServer();
+    } catch (e) {
+      if (kDebugMode) print('DailyGoalsRepositoryImpl.create: erro - $e');
+      rethrow;
+    }
+  }
+
+  /// Atualiza uma meta existente no servidor e sincroniza o cache local.
+  Future<void> update(DailyGoalEntity goal) async {
+    try {
+      final dto = _mapper.entityToDto(goal);
+      await supabase.from('daily_goals').update(dto.toJson()).eq('goal_id', goal.id);
+      await syncFromServer();
+    } catch (e) {
+      if (kDebugMode) print('DailyGoalsRepositoryImpl.update: erro - $e');
+      rethrow;
     }
   }
 
