@@ -5,7 +5,7 @@ import '../../domain/entities/service_provider_entity.dart';
 class ServiceProviderDto {
   final String id;
   final String name;
-  final String category; // Salva como String (ex: 'electrician')
+  final String category;
   final String phone;
   final double rating;
   final bool isFavorite;
@@ -20,13 +20,14 @@ class ServiceProviderDto {
   });
 
   // JSON (Supabase) -> DTO
+  // AQUI ESTAVA O PROBLEMA: Adicionei proteções (?? '') para evitar crash com nulos
   factory ServiceProviderDto.fromJson(Map<String, dynamic> json) {
     return ServiceProviderDto(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      category: json['category'] as String,
-      phone: json['phone'] as String,
-      rating: (json['rating'] as num).toDouble(),
+      id: json['id']?.toString() ?? '', // Proteção contra ID nulo
+      name: json['name']?.toString() ?? 'Sem Nome', // Proteção contra Nome nulo
+      category: json['category']?.toString() ?? 'other',
+      phone: json['phone']?.toString() ?? '', // Proteção CRÍTICA: aceita nulo e vira ''
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0, // Proteção para números
       isFavorite: json['is_favorite'] ?? false,
     );
   }

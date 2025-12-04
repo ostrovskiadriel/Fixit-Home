@@ -44,8 +44,17 @@ class ServiceProvidersRepositoryImpl implements ServiceProvidersRepository {
   Future<void> create(ServiceProviderEntity provider) async {
     try {
       final dto = _mapper.entityToDto(provider);
-      // write to remote and sync
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.create: criando prestador ${provider.name}');
+
+      // 1) write to remote
       await _remote.upsertServiceProviders([dto]);
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.create: enviado para remoto com sucesso');
+
+      // 2) upsert locally immediately so UI updates right away
+      await _localDao.upsertAll([dto]);
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.create: upserted localmente');
+
+      // 3) sync to get any other changes
       await syncFromServer();
     } catch (e) {
       if (kDebugMode) print('ServiceProvidersRepositoryImpl.create: erro - $e');
@@ -57,7 +66,17 @@ class ServiceProvidersRepositoryImpl implements ServiceProvidersRepository {
   Future<void> update(ServiceProviderEntity provider) async {
     try {
       final dto = _mapper.entityToDto(provider);
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.update: atualizando prestador ${provider.name}');
+
+      // 1) write to remote
       await _remote.upsertServiceProviders([dto]);
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.update: enviado para remoto com sucesso');
+
+      // 2) upsert locally immediately so UI updates right away
+      await _localDao.upsertAll([dto]);
+      if (kDebugMode) print('ServiceProvidersRepositoryImpl.update: upserted localmente');
+
+      // 3) sync to get any other changes
       await syncFromServer();
     } catch (e) {
       if (kDebugMode) print('ServiceProvidersRepositoryImpl.update: erro - $e');
