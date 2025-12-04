@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 // Import corrigido
 import '../features/daily_goals/presentation/pages/daily_goals_list_screen.dart';
 import 'package:fixit_home/features/maintenance_tasks/presentation/pages/maintenance_tasks_list_page.dart';
+import 'package:fixit_home/features/service_providers/presentation/pages/service_providers_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -19,6 +20,10 @@ void _navigateToMaintenance(BuildContext context) {
   Navigator.of(context).push(
     MaterialPageRoute(builder: (ctx) => const MaintenanceTasksListPage()),
   );
+}
+
+void _navigateToProviders(BuildContext context) {
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ServiceProvidersListScreen()));
 }
 
   @override
@@ -70,6 +75,13 @@ void _navigateToMaintenance(BuildContext context) {
              style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 16),
   ),
+),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+             onPressed: () => _navigateToProviders(context),
+             icon: const Icon(Icons.contacts),
+             label: const Text('Contatos Úteis'),
+             style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
 ),
             ],
           ),
