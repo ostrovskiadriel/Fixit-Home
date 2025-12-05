@@ -15,6 +15,8 @@ class PrefsService {
   // --- Versão Atual das Políticas ---
   // Se você mudar isso para "v2", o app forçará o usuário a aceitar de novo.
   static const String _kCurrentPoliciesVersion = 'v1';
+  // Key for theme mode persistence
+  static const String _kThemeModeKey = 'theme_mode';
 
   /// Inicializa o serviço. Deve ser chamado no main.dart
   static Future<void> init() async {
@@ -51,5 +53,18 @@ class PrefsService {
   /// Limpa o aceite das políticas (para o fluxo de revogação) [cite: 865]
   static Future<void> clearPolicyAcceptance() async {
     await _prefs.remove(_kPoliciesVersionAcceptedKey);
+  }
+
+  // --- Theme Mode Persistence ---
+  static Future<String> getThemeMode() async {
+    return _prefs.getString(_kThemeModeKey) ?? 'system';
+  }
+
+  static Future<void> setThemeMode(String mode) async {
+    await _prefs.setString(_kThemeModeKey, mode);
+  }
+
+  static Future<void> removeThemeMode() async {
+    await _prefs.remove(_kThemeModeKey);
   }
 }

@@ -150,15 +150,15 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _tasks.isEmpty
-              ? RefreshIndicator(
-                  onRefresh: () => _repo?.syncFromServer().then((_) => _loadTasks()) ?? _loadTasks(),
-                  child: const SingleChildScrollView(
-                    physics: AlwaysScrollableScrollPhysics(),
-                    child: SizedBox(height: 300, child: Center(child: Text('Nenhuma manutenção agendada.'))),
-                  ),
-                )
-              : _buildList(),
+          : RefreshIndicator(
+              onRefresh: () => _repo?.syncFromServer().then((_) => _loadTasks()) ?? _loadTasks(),
+              child: _tasks.isEmpty
+                  ? const SingleChildScrollView(
+                      physics: AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(height: 300, child: Center(child: Text('Nenhuma manutenção agendada.'))),
+                    )
+                  : _buildList(),
+            ),
       floatingActionButton: FloatingActionButton(onPressed: _addTask, child: const Icon(Icons.add)),
     );
   }

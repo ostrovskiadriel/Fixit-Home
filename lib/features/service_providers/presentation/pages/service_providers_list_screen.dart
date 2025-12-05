@@ -125,36 +125,52 @@ class _ServiceProvidersListScreenState extends State<ServiceProvidersListScreen>
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _providers.isEmpty
-              ? const Center(child: Text('Nenhum prestador cadastrado.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: _providers.length,
-                  itemBuilder: (ctx, index) {
-                    final p = _providers[index];
-                    return Card(
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.grey.shade200,
-                          child: Text(p.categoryIcon),
-                        ),
-                        title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${p.categoryLabel} • ${p.phoneNumber}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (p.isFavorite) const Icon(Icons.favorite, color: Colors.red, size: 20),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.star, color: Colors.amber, size: 16),
-                            Text(p.rating.toStringAsFixed(1)),
-                          ],
-                        ),
-                        onLongPress: () => _deleteProvider(p.id),
-                        onTap: () => _editProvider(p),
-                      ),
-                    );
-                  },
-                ),
+          : RefreshIndicator(
+              onRefresh: () async {
+                await _repository.syncFromServer();
+                await _loadData();
+              },
+              child: _providers.isEmpty
+                  ? const SingleChildScrollView(
+                      physics: AlwaysScrollableScrollPhysics(),
+                      child: SizedBox(height: 300, child: Center(child: Text('Nenhum prestador cadastrado.'))),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _providers.length,
+                      itemBuilder: (ctx, index) {
+                        final p = _providers[index];
+                        return Card(
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.grey.shade200,
+                              child: Text(p.categoryIcon),
+                            ),
+                            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('${p.categoryLabel} • ${p.phoneNumber}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (p.isFavorite) const Icon(Icons.favorite, color: Colors.red, size: 20),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.star, color: Colors.amber, size: 16),
+                                Text(p.rating.toStringAsFixed(1)),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                  onPressed: () => _deleteProvider(p.id),
+                                  tooltip: 'Remover contato',
+                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ],
+                            ),
+                            onTap: () => _editProvider(p),
+                          ),
+                        );
+                      },
+                    ),
+            ),
     );
   }
 }

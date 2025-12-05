@@ -170,36 +170,35 @@ class _DailyGoalsListScreenState extends State<DailyGoalsListScreen> {
   }
 
   Widget _buildGoalList() {
-    if (_goals.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: () => _repo?.syncFromServer().then((_) => _loadGoals()) ?? _loadGoals(),
-        child: const SingleChildScrollView(
-          physics: AlwaysScrollableScrollPhysics(),
-          child: SizedBox(height: 300, child: Center(child: Text('Nenhuma meta encontrada.'))),
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(8.0),
-      itemCount: _goals.length,
-      itemBuilder: (context, index) {
-        final goal = _goals[index];
-        return Card(
-          child: ListTile(
-            leading: Text(goal.type.icon, style: const TextStyle(fontSize: 24)),
-            title: Text(goal.type.description),
-            subtitle: Text('Progresso: ${goal.currentValue} / ${goal.targetValue}'),
-            trailing: const Icon(Icons.chevron_right),
-            // AQUI ESTÁ A IMPLEMENTAÇÃO DO REQUISITO 5:
-            onTap: () => showDailyGoalDetailsDialog(
-              context,
-              goal: goal,
-              onEdit: () => _onEditGoal(goal),     // Conecta a função de Editar
-              onRemove: () => _onRemoveGoal(goal), // Conecta a função de Remover
+    return RefreshIndicator(
+      onRefresh: () => _repo?.syncFromServer().then((_) => _loadGoals()) ?? _loadGoals(),
+      child: _goals.isEmpty
+          ? const SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              child: SizedBox(height: 300, child: Center(child: Text('Nenhuma meta encontrada.'))),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(8.0),
+              itemCount: _goals.length,
+              itemBuilder: (context, index) {
+                final goal = _goals[index];
+                return Card(
+                  child: ListTile(
+                    leading: Text(goal.type.icon, style: const TextStyle(fontSize: 24)),
+                    title: Text(goal.type.description),
+                    subtitle: Text('Progresso: ${goal.currentValue} / ${goal.targetValue}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    // AQUI ESTÁ A IMPLEMENTAÇÃO DO REQUISITO 5:
+                    onTap: () => showDailyGoalDetailsDialog(
+                      context,
+                      goal: goal,
+                      onEdit: () => _onEditGoal(goal),     // Conecta a função de Editar
+                      onRemove: () => _onRemoveGoal(goal), // Conecta a função de Remover
+                    ),
+                  ),
+                );
+              },
             ),
-          ),
-        );
-      },
     );
   }
 
