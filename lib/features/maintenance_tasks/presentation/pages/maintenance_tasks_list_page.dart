@@ -129,6 +129,7 @@ class _MaintenanceTasksListPageState extends State<MaintenanceTasksListPage> {
         if (_repo == null) throw Exception('Repositório não inicializado');
         await _repo!.delete(task.id);
         await _loadTasks();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tarefa removida.')));
       } catch (e) {
         _showError('Erro ao deletar: $e');
       }

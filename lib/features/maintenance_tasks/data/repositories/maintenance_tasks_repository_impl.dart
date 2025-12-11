@@ -147,7 +147,18 @@ class MaintenanceTasksRepositoryImpl implements MaintenanceTasksRepository {
   @override
   Future<void> delete(String id) async {
     try {
-      await supabase.from('maintenance_tasks').delete().eq('id', id);
+      // Attempt to delete from remote (best-effort)
+      try {
+        await supabase.from('maintenance_tasks').delete().eq('id', id);
+      } catch (e) {
+        if (kDebugMode) print('MaintenanceTasksRepositoryImpl.delete: erro ao deletar no remoto - $e');
+      }
+
+      // Remove from local cache immediately so UI reflects the change
+      await _localDao.delete(id);
+      if (kDebugMode) print('MaintenanceTasksRepositoryImpl.delete: $id deletado localmente');
+
+      // Then trigger a sync to reconcile any further changes
       await syncFromServer();
     } catch (e) {
       if (kDebugMode) print('MaintenanceTasksRepositoryImpl.delete: erro - $e');
